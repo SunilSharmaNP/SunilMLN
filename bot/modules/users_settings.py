@@ -22,6 +22,7 @@ from ..helper.ext_utils.bot_utils import (
     new_task,
     update_user_ldata,
 )
+from ..helper.video_utils import VID_MODE
 from ..helper.ext_utils.db_handler import database
 from ..helper.ext_utils.media_utils import create_thumb
 from ..helper.telegram_helper.button_build import ButtonMaker
@@ -68,6 +69,86 @@ advanced_options = [
 ]
 yt_options = ["YT_DESP", "YT_TAGS", "YT_CATEGORY_ID", "YT_PRIVACY_STATUS"]
 
+_COMPRESS_PRESETS = ["ultrafast", "superfast", "veryfast", "faster", "fast", "medium"]
+
+_VID_ICONS = {
+    "vid_vid":   "🎞️",
+    "vid_aud":   "🎵",
+    "vid_sub":   "📝",
+    "subsync":   "🔄",
+    "compress":  "🗜️",
+    "convert":   "🔁",
+    "watermark": "💧",
+    "extract":   "📤",
+    "trim":      "✂️",
+    "rmstream":  "🗑️",
+}
+
+_VID_FIELD_OPTIONS = {
+    "vid_merge_mode":     ["sequential", "concat"],
+    "vid_audio_codec":    ["aac", "mp3", "ac3", "opus"],
+    "vid_convert_format": ["mp4", "mkv", "webm", "mov"],
+    "vid_watermark_pos":  ["top-left", "top-right", "bottom-left", "bottom-right", "center"],
+}
+
+_VID_MULTI_OPTIONS = {
+    "vid_extract_streams": ["video", "audio", "subtitle"],
+    "vid_rmstream_kind":   ["audio", "subtitle"],
+}
+
+_VID_DEFAULTS = {
+    "vid_merge_mode":        "sequential",
+    "vid_audio_lang":        "",
+    "vid_audio_codec":       "aac",
+    "vid_subsync_delay":     "0",
+    "vid_convert_format":    "mp4",
+    "vid_watermark_text":    "",
+    "vid_watermark_pos":     "bottom-right",
+    "vid_watermark_opacity": "50",
+    "vid_extract_streams":   ["audio", "subtitle"],
+    "vid_trim_start":        "00:00:00",
+    "vid_trim_end":          "00:00:00",
+    "vid_rmstream_kind":     [],
+}
+
+_VID_SETTING_MAP = {
+    "vid_vid":   "vid_merge",
+    "vid_aud":   "vid_audmux",
+    "vid_sub":   "vid_hardsub",
+    "subsync":   "vid_subsync",
+    "compress":  "vid_compress",
+    "convert":   "vid_convert",
+    "watermark": "vid_watermark",
+    "extract":   "vid_extract",
+    "trim":      "vid_trim",
+    "rmstream":  "vid_rmstream",
+}
+
+_TOGGLE_BACK_MAP = {
+    "vid_vid":   "vid_merge",
+    "vid_aud":   "vid_audmux",
+    "vid_sub":   "vid_hardsub",
+    "subsync":   "vid_subsync",
+    "compress":  "vid_compress",
+    "convert":   "vid_convert",
+    "watermark": "vid_watermark",
+    "extract":   "vid_extract",
+    "trim":      "vid_trim",
+    "rmstream":  "vid_rmstream",
+}
+
+_VID_INPUT_MAP = {
+    "vid_audio_lang":        ("Audio Language",    "Send ISO 639 language code (e.g. <code>eng</code>, <code>hin</code>, <code>jpn</code>).", "vid_audmux"),
+    "vid_subsync_delay":     ("Sync Delay (ms)",   "Send delay in ms. Positive delays subs, negative advances (e.g. <code>-500</code>).",    "vid_subsync"),
+    "vid_watermark_text":    ("Watermark Text",    "Send text to use as watermark (e.g. <code>@MyChannel</code>).",                          "vid_watermark"),
+    "vid_watermark_opacity": ("Opacity (%)",       "Send opacity as number 0–100 (e.g. <code>50</code>).",                                   "vid_watermark"),
+    "vid_trim_start":        ("Start Time",        "Send start time in HH:MM:SS (e.g. <code>00:01:30</code>).",                              "vid_trim"),
+    "vid_trim_end":          ("End Time",          "Send end time in HH:MM:SS (e.g. <code>00:05:00</code>).",                                "vid_trim"),
+    "vid_banner":            ("Compress Banner",   "Send banner text (e.g. <code>Re-Encoded by @MyChannel</code>).",                         "vid_compress"),
+    "vid_hardsub_font":      ("HardSub Font",      "Send font name (e.g. <code>Arial</code>).",                                              "vid_hardsub"),
+    "vid_hardsub_size":      ("HardSub Font Size", "Send font size as a number (e.g. <code>24</code>).",                                     "vid_hardsub"),
+}
+
 user_settings_text = {
     "THUMBNAIL": (
         "Photo or Doc",
@@ -90,14 +171,20 @@ user_settings_text = {
         f"Send Leech split size in bytes or use gb or mb. Example: 40000000 or 2.5gb or 1000mb. PREMIUM_USER: {TgClient.IS_PREMIUM_USER}.</i> \n┖ <b>Time Left :</b> <code>60 sec</code>",
     ),
     "LEECH_DUMP_CHAT": (
-        "",
-        "",
-        """Send leech destination ID/USERNAME/PM. 
-* b:id/@username/pm (b: means leech by bot) (id or username of the chat or write pm means private message so bot will send the files in private to you) when you should use b:(leech by bot)? When your default settings is leech by user and you want to leech by bot for specific task.
-* u:id/@username(u: means leech by user) This incase OWNER added USER_STRING_SESSION.
-* h:id/@username(hybrid leech) h: to upload files by bot and user based on file size.
-* id/@username|topic_id(leech in specific chat and topic) add | without space and write topic id after chat id or username.
-┖ <b>Time Left :</b> <code>60 sec</code>""",
+        "Chat ID / @username / pm",
+        "Personal Leech Dump Channel — leech files are also forwarded here after upload.",
+        """<i>📤 Send your personal Leech Dump Channel ID or username.</i>
+
+<b>Formats supported:</b>
+• Plain chat ID → <code>-1001234567890</code>
+• @username → <code>@mychannel</code>
+• <code>pm</code> → bot will send files to your private PM
+• <code>b:id/@username</code> — force bot session
+• <code>u:id/@username</code> — force user session
+• <code>h:id/@username</code> — hybrid (bot + user)
+• <code>id|topic_id</code> — send to specific forum topic
+
+⏱ <b>Time Left :</b> <code>60 sec</code>""",
     ),
     "LEECH_PREFIX": (
         "",
@@ -192,18 +279,22 @@ Here I will explain how to use mltb.* which is reference to files you want to wo
 """,
     ),
     "METADATA": (
-        "🏷 Global Metadata (key=value|key=value)",
-        "Apply metadata to all media files with dynamic variables.",
-        """<i>📝 Send metadata as</i> <code>key=value|key2=value2</code>
+        "🏷 Global Metadata — plain text title OR key=value",
+        "Apply metadata to all media files. Plain text sets title on ALL streams automatically.",
+        """<i>📝 Two ways to set metadata:</i>
+
+<b>1️⃣ Plain Text (applies title to ALL streams):</b>
+Just send your title text → <code>My Movie Title</code>
+Bot automatically sets <code>title=My Movie Title</code> on video, audio and subtitle tracks.
+
+<b>2️⃣ Advanced key=value format:</b>
+<code>title={basename}|artist={audiolang} Version|year={year}</code>
 
 <b>🔧 Dynamic Variables:</b>
 • <code>{filename}</code> - Original filename
 • <code>{basename}</code> - Name without extension
 • <code>{audiolang}</code> - Audio language (English/Hindi etc.)
 • <code>{year}</code> - Year from filename
-
-<b>📋 Example:</b>
-<code>title={basename}|artist={audiolang} Version|year={year}</code>
 
 ⏱ <b>Time Left:</b> <code>60 sec</code>""",
     ),
@@ -306,6 +397,7 @@ async def get_user_settings(from_user, stype="main"):
         buttons.data_button("Leech Settings", f"userset {user_id} leech")
         buttons.data_button("Uphoster Settings", f"userset {user_id} uphoster")
         buttons.data_button("FF Media Settings", f"userset {user_id} ffset")
+        buttons.data_button("Video Tools", f"userset {user_id} vidtools")
         buttons.data_button(
             "Mics Settings", f"userset {user_id} advanced", position="l_body"
         )
@@ -759,7 +851,7 @@ async def get_user_settings(from_user, stype="main"):
                 ]
             )
 
-        buttons.data_button("Metadata", f"userset {user_id} menu METADATA")
+        buttons.data_button("📝 Metadata (All Streams)", f"userset {user_id} menu METADATA")
         metadata_setting = user_dict.get("METADATA")
         display_meta_val = "<b>Not Set</b>"
         if isinstance(metadata_setting, dict) and metadata_setting:
@@ -772,7 +864,7 @@ async def get_user_settings(from_user, stype="main"):
                 f"<code>{escape(metadata_setting)}</code> [<i>Legacy, needs re-set</i>]"
             )
 
-        buttons.data_button("Audio Metadata", f"userset {user_id} menu AUDIO_METADATA")
+        buttons.data_button("🎵 Audio Metadata", f"userset {user_id} menu AUDIO_METADATA")
         audio_meta_setting = user_dict.get("AUDIO_METADATA")
         display_audio_meta = "<b>Not Set</b>"
         if isinstance(audio_meta_setting, dict) and audio_meta_setting:
@@ -781,7 +873,7 @@ async def get_user_settings(from_user, stype="main"):
             )
             display_audio_meta = f"<code>{display_audio_meta}</code>"
 
-        buttons.data_button("Video Metadata", f"userset {user_id} menu VIDEO_METADATA")
+        buttons.data_button("🎥 Video Metadata", f"userset {user_id} menu VIDEO_METADATA")
         video_meta_setting = user_dict.get("VIDEO_METADATA")
         display_video_meta = "<b>Not Set</b>"
         if isinstance(video_meta_setting, dict) and video_meta_setting:
@@ -791,7 +883,7 @@ async def get_user_settings(from_user, stype="main"):
             display_video_meta = f"<code>{display_video_meta}</code>"
 
         buttons.data_button(
-            "Subtitle Metadata", f"userset {user_id} menu SUBTITLE_METADATA"
+            "💬 Subtitle Metadata", f"userset {user_id} menu SUBTITLE_METADATA"
         )
         subtitle_meta_setting = user_dict.get("SUBTITLE_METADATA")
         display_subtitle_meta = "<b>Not Set</b>"
@@ -801,6 +893,14 @@ async def get_user_settings(from_user, stype="main"):
             )
             display_subtitle_meta = f"<code>{display_subtitle_meta}</code>"
 
+        any_meta_set = any([
+            isinstance(metadata_setting, (dict, str)) and metadata_setting,
+            isinstance(audio_meta_setting, dict) and audio_meta_setting,
+            isinstance(video_meta_setting, dict) and video_meta_setting,
+            isinstance(subtitle_meta_setting, dict) and subtitle_meta_setting,
+        ])
+        if any_meta_set:
+            buttons.data_button("🗑 Clear All Metadata", f"userset {user_id} clear_all_meta", "footer")
         buttons.data_button("Back", f"userset {user_id} back", "footer")
         buttons.data_button("Close", f"userset {user_id} close", "footer")
         btns = buttons.build_menu(2)
@@ -810,10 +910,12 @@ async def get_user_settings(from_user, stype="main"):
 ┃
 ┠ <b>FFmpeg CLI Commands</b> → {ffc}
 ┃
-┠ <b>Default Metadata</b> → {display_meta_val}
-┠ <b>Audio Metadata</b> → {display_audio_meta}
-┠ <b>Video Metadata</b> → {display_video_meta}
-┖ <b>Subtitle Metadata</b> → {display_subtitle_meta}"""
+┠ <b>📝 Metadata (All Streams)</b> → {display_meta_val}
+┠ <b>🎵 Audio Metadata</b> → {display_audio_meta}
+┠ <b>🎥 Video Metadata</b> → {display_video_meta}
+┖ <b>💬 Subtitle Metadata</b> → {display_subtitle_meta}
+┃
+┖ <i>Tip: Send plain text as Metadata to auto-set title on ALL streams.</i>"""
 
     elif stype == "advanced":
         buttons.data_button(
@@ -920,6 +1022,295 @@ async def get_user_settings(from_user, stype="main"):
 ┠ <b>YT Category ID</b> → <code>{escape(str(yt_cat_id_val))}</code>
 ┖ <b>YT Privacy Status</b> → <code>{escape(str(yt_privacy_val))}</code>"""
 
+    # ── Video Tools ──
+    elif stype == "vidtools":
+        for key, label in VID_MODE.items():
+            icon = _VID_ICONS.get(key, "🎬")
+            buttons.data_button(f"{icon} {label}", f"userset {user_id} vid_setting {key}")
+        buttons.data_button("« Back",  f"userset {user_id} back",  "footer")
+        buttons.data_button("✘ Close", f"userset {user_id} close", "footer")
+        btns = buttons.build_menu(2)
+        text = (
+            f"⌬ <b>Video Tools :</b> {user_name}\n"
+            f"┟\n"
+            f"┖ <b>Total Tools :</b> <i>{len(VID_MODE)}</i>\n\n"
+            f"<i>Choose a video tool below to view and manage its settings.</i>"
+        )
+
+    # ── Merge Videos ──
+    elif stype == "vid_merge":
+        is_enabled = "vid_vid" not in set(user_dict.get("disabled_vidtools", []))
+        merge_mode = user_dict.get("vid_merge_mode") or _VID_DEFAULTS["vid_merge_mode"]
+        buttons.data_button(
+            f'{"❌ Disable" if is_enabled else "✅ Enable"} Tool',
+            f"userset {user_id} toggle_vid vid_vid")
+        buttons.data_button(
+            f"Merge Mode : {merge_mode.title()}",
+            f"userset {user_id} vid_cycle vid_merge_mode")
+        buttons.data_button("« Back",  f"userset {user_id} vidtools", "footer")
+        buttons.data_button("✘ Close", f"userset {user_id} close",   "footer")
+        btns = buttons.build_menu(2)
+        text = (
+            f"⌬ <b>Merge Videos :</b> {user_name}\n"
+            f"┟\n"
+            f"┠ <b>Status :</b> <i>{'Enabled ✅' if is_enabled else 'Disabled ❌'}</i>\n"
+            f"┖ <b>Merge Mode :</b> <i>{merge_mode.title()}</i>\n\n"
+            f"<i>Merge multiple videos. Sequential = play one after another, "
+            f"Concat = ffmpeg concat demuxer (faster, same codec required).</i>"
+        )
+
+    # ── Audio Mux ──
+    elif stype == "vid_audmux":
+        is_enabled  = "vid_aud" not in set(user_dict.get("disabled_vidtools", []))
+        audio_lang  = user_dict.get("vid_audio_lang") or "Auto"
+        audio_codec = user_dict.get("vid_audio_codec") or _VID_DEFAULTS["vid_audio_codec"]
+        has_lang    = bool(user_dict.get("vid_audio_lang"))
+        buttons.data_button(
+            f'{"❌ Disable" if is_enabled else "✅ Enable"} Tool',
+            f"userset {user_id} toggle_vid vid_aud")
+        buttons.data_button(
+            f'{"✅ " if has_lang else ""}Audio Language',
+            f"userset {user_id} vid_settext vid_audio_lang")
+        if has_lang:
+            buttons.data_button("🗑️ Reset Language", f"userset {user_id} rem_vid vid_audio_lang")
+        buttons.data_button(
+            f"Audio Codec : {audio_codec.upper()}",
+            f"userset {user_id} vid_cycle vid_audio_codec")
+        buttons.data_button("« Back",  f"userset {user_id} vidtools", "footer")
+        buttons.data_button("✘ Close", f"userset {user_id} close",   "footer")
+        btns = buttons.build_menu(2)
+        text = (
+            f"⌬ <b>Merge Audio Tracks :</b> {user_name}\n"
+            f"┟\n"
+            f"┠ <b>Status :</b> <i>{'Enabled ✅' if is_enabled else 'Disabled ❌'}</i>\n"
+            f"┠ <b>Audio Language :</b> <code>{audio_lang}</code>\n"
+            f"┖ <b>Audio Codec :</b> <i>{audio_codec.upper()}</i>\n\n"
+            f"<i>Mux external audio into your video. Set ISO 639 language code "
+            f"(e.g. <code>eng</code>, <code>hin</code>) and target codec.</i>"
+        )
+
+    # ── Hardsub ──
+    elif stype == "vid_hardsub":
+        is_enabled = "vid_sub" not in set(user_dict.get("disabled_vidtools", []))
+        has_font   = bool(user_dict.get("vid_hardsub_font"))
+        has_size   = bool(user_dict.get("vid_hardsub_size"))
+        hs_font    = user_dict.get("vid_hardsub_font") or getattr(Config, "VT_HARDSUB_FONT_NAME", None) or "Arial"
+        hs_size    = user_dict.get("vid_hardsub_size") or getattr(Config, "VT_HARDSUB_FONT_SIZE", None) or "Default"
+        buttons.data_button(
+            f'{"❌ Disable" if is_enabled else "✅ Enable"} Tool',
+            f"userset {user_id} toggle_vid vid_sub")
+        buttons.data_button(
+            f'{"✅ " if has_font else ""}HardSub Font',
+            f"userset {user_id} vid_settext vid_hardsub_font")
+        if has_font:
+            buttons.data_button("🗑️ Reset Font", f"userset {user_id} rem_vid vid_hardsub_font")
+        buttons.data_button(
+            f'{"✅ " if has_size else ""}Font Size',
+            f"userset {user_id} vid_settext vid_hardsub_size")
+        if has_size:
+            buttons.data_button("🗑️ Reset Size", f"userset {user_id} rem_vid vid_hardsub_size")
+        buttons.data_button("« Back",  f"userset {user_id} vidtools", "footer")
+        buttons.data_button("✘ Close", f"userset {user_id} close",   "footer")
+        btns = buttons.build_menu(2)
+        text = (
+            f"⌬ <b>Merge Subtitles :</b> {user_name}\n"
+            f"┟\n"
+            f"┠ <b>Status :</b> <i>{'Enabled ✅' if is_enabled else 'Disabled ❌'}</i>\n"
+            f"┠ <b>Font :</b> <code>{hs_font}</code>\n"
+            f"┖ <b>Font Size :</b> <code>{hs_size}</code>\n\n"
+            f"<i>Hardcode (burn-in) subtitle files permanently into your video stream.</i>"
+        )
+
+    # ── SubSync ──
+    elif stype == "vid_subsync":
+        is_enabled = "subsync" not in set(user_dict.get("disabled_vidtools", []))
+        has_delay  = bool(user_dict.get("vid_subsync_delay"))
+        delay      = user_dict.get("vid_subsync_delay") or _VID_DEFAULTS["vid_subsync_delay"]
+        buttons.data_button(
+            f'{"❌ Disable" if is_enabled else "✅ Enable"} Tool',
+            f"userset {user_id} toggle_vid subsync")
+        buttons.data_button(
+            f'{"✅ " if has_delay else ""}Sync Delay (ms)',
+            f"userset {user_id} vid_settext vid_subsync_delay")
+        if has_delay:
+            buttons.data_button("🗑️ Reset Delay", f"userset {user_id} rem_vid vid_subsync_delay")
+        buttons.data_button("« Back",  f"userset {user_id} vidtools", "footer")
+        buttons.data_button("✘ Close", f"userset {user_id} close",   "footer")
+        btns = buttons.build_menu(2)
+        text = (
+            f"⌬ <b>Subtitle Sync :</b> {user_name}\n"
+            f"┟\n"
+            f"┠ <b>Status :</b> <i>{'Enabled ✅' if is_enabled else 'Disabled ❌'}</i>\n"
+            f"┖ <b>Sync Delay :</b> <code>{delay} ms</code>\n\n"
+            f"<i>Adjust subtitle timing. Positive delays subs, negative advances them. "
+            f"Example: <code>-500</code> = 500ms earlier.</i>"
+        )
+
+    # ── Compress ──
+    elif stype == "vid_compress":
+        vid_264    = user_dict.get("vid_264_preset") or getattr(Config, "VT_LIB264_PRESET", None) or "fast"
+        vid_265    = user_dict.get("vid_265_preset") or getattr(Config, "VT_LIB265_PRESET", None) or "slow"
+        has_banner = bool(user_dict.get("vid_banner"))
+        vid_banner = user_dict.get("vid_banner") or getattr(Config, "VT_COMPRESS_BANNER", None) or "Not Set"
+        for p in _COMPRESS_PRESETS:
+            mark = "🔥 " if p == vid_264 else ""
+            buttons.data_button(f"{mark}264:{p}", f"userset {user_id} vid_set vid_264_preset {p}")
+        for p in _COMPRESS_PRESETS:
+            mark = "🔥 " if p == vid_265 else ""
+            buttons.data_button(f"{mark}265:{p}", f"userset {user_id} vid_set vid_265_preset {p}")
+        buttons.data_button(
+            f'{"✅ " if has_banner else ""}Compress Banner',
+            f"userset {user_id} vid_settext vid_banner")
+        if has_banner:
+            buttons.data_button("🗑️ Reset Banner", f"userset {user_id} rem_vid vid_banner")
+        buttons.data_button("« Back",  f"userset {user_id} vidtools", "footer")
+        buttons.data_button("✘ Close", f"userset {user_id} close",   "footer")
+        btns = buttons.build_menu(3)
+        text = (
+            f"⌬ <b>Compress Video :</b> {user_name}\n"
+            f"┟\n"
+            f"┠ <b>x264 Preset :</b> <i>{vid_264}</i>\n"
+            f"┠ <b>x265 Preset :</b> <i>{vid_265}</i>\n"
+            f"┖ <b>Banner :</b> <code>{escape(str(vid_banner))}</code>\n\n"
+            f"<i>Re-encode videos using x264 or x265. Tap a preset to set it as default.</i>"
+        )
+
+    # ── Convert ──
+    elif stype == "vid_convert":
+        is_enabled = "convert" not in set(user_dict.get("disabled_vidtools", []))
+        fmt        = user_dict.get("vid_convert_format") or _VID_DEFAULTS["vid_convert_format"]
+        buttons.data_button(
+            f'{"❌ Disable" if is_enabled else "✅ Enable"} Tool',
+            f"userset {user_id} toggle_vid convert")
+        for f in _VID_FIELD_OPTIONS["vid_convert_format"]:
+            mark = "🔥 " if f == fmt else ""
+            buttons.data_button(f"{mark}{f.upper()}", f"userset {user_id} vid_set vid_convert_format {f}")
+        buttons.data_button("« Back",  f"userset {user_id} vidtools", "footer")
+        buttons.data_button("✘ Close", f"userset {user_id} close",   "footer")
+        btns = buttons.build_menu(3)
+        text = (
+            f"⌬ <b>Convert Format :</b> {user_name}\n"
+            f"┟\n"
+            f"┠ <b>Status :</b> <i>{'Enabled ✅' if is_enabled else 'Disabled ❌'}</i>\n"
+            f"┖ <b>Output Format :</b> <i>{fmt.upper()}</i>\n\n"
+            f"<i>Convert videos between container formats. Tap a format to set it as default.</i>"
+        )
+
+    # ── Watermark ──
+    elif stype == "vid_watermark":
+        is_enabled = "watermark" not in set(user_dict.get("disabled_vidtools", []))
+        has_text   = bool(user_dict.get("vid_watermark_text"))
+        has_opa    = bool(user_dict.get("vid_watermark_opacity"))
+        wm_text    = user_dict.get("vid_watermark_text")    or "Not Set"
+        wm_pos     = user_dict.get("vid_watermark_pos")     or _VID_DEFAULTS["vid_watermark_pos"]
+        wm_opa     = user_dict.get("vid_watermark_opacity") or _VID_DEFAULTS["vid_watermark_opacity"]
+        buttons.data_button(
+            f'{"❌ Disable" if is_enabled else "✅ Enable"} Tool',
+            f"userset {user_id} toggle_vid watermark")
+        buttons.data_button(
+            f'{"✅ " if has_text else ""}Watermark Text',
+            f"userset {user_id} vid_settext vid_watermark_text")
+        if has_text:
+            buttons.data_button("🗑️ Reset Text", f"userset {user_id} rem_vid vid_watermark_text")
+        buttons.data_button(
+            f"Position : {wm_pos.title()}",
+            f"userset {user_id} vid_cycle vid_watermark_pos")
+        buttons.data_button(
+            f'{"✅ " if has_opa else ""}Opacity (%)',
+            f"userset {user_id} vid_settext vid_watermark_opacity")
+        if has_opa:
+            buttons.data_button("🗑️ Reset Opacity", f"userset {user_id} rem_vid vid_watermark_opacity")
+        buttons.data_button("« Back",  f"userset {user_id} vidtools", "footer")
+        buttons.data_button("✘ Close", f"userset {user_id} close",   "footer")
+        btns = buttons.build_menu(2)
+        text = (
+            f"⌬ <b>Add Watermark :</b> {user_name}\n"
+            f"┟\n"
+            f"┠ <b>Status :</b> <i>{'Enabled ✅' if is_enabled else 'Disabled ❌'}</i>\n"
+            f"┠ <b>Text :</b> <code>{wm_text}</code>\n"
+            f"┠ <b>Position :</b> <i>{wm_pos.title()}</i>\n"
+            f"┖ <b>Opacity :</b> <i>{wm_opa}%</i>\n\n"
+            f"<i>Apply text watermark on output videos. Set position and opacity (0–100).</i>"
+        )
+
+    # ── Extract ──
+    elif stype == "vid_extract":
+        is_enabled = "extract" not in set(user_dict.get("disabled_vidtools", []))
+        selected   = user_dict.get("vid_extract_streams", _VID_DEFAULTS["vid_extract_streams"])
+        buttons.data_button(
+            f'{"❌ Disable" if is_enabled else "✅ Enable"} Tool',
+            f"userset {user_id} toggle_vid extract")
+        for stream in _VID_MULTI_OPTIONS["vid_extract_streams"]:
+            mark = "✅" if stream in selected else "❌"
+            buttons.data_button(
+                f"{mark} {stream.title()}",
+                f"userset {user_id} vid_multi vid_extract_streams {stream}")
+        buttons.data_button("« Back",  f"userset {user_id} vidtools", "footer")
+        buttons.data_button("✘ Close", f"userset {user_id} close",   "footer")
+        btns = buttons.build_menu(2)
+        text = (
+            f"⌬ <b>Extract Stream :</b> {user_name}\n"
+            f"┟\n"
+            f"┠ <b>Status :</b> <i>{'Enabled ✅' if is_enabled else 'Disabled ❌'}</i>\n"
+            f"┖ <b>Extract :</b> <i>{', '.join(s.title() for s in selected) or 'None'}</i>\n\n"
+            f"<i>Toggle which stream types to extract from the source media file.</i>"
+        )
+
+    # ── Trim ──
+    elif stype == "vid_trim":
+        is_enabled = "trim" not in set(user_dict.get("disabled_vidtools", []))
+        has_start  = bool(user_dict.get("vid_trim_start"))
+        has_end    = bool(user_dict.get("vid_trim_end"))
+        t_start    = user_dict.get("vid_trim_start") or _VID_DEFAULTS["vid_trim_start"]
+        t_end      = user_dict.get("vid_trim_end")   or _VID_DEFAULTS["vid_trim_end"]
+        buttons.data_button(
+            f'{"❌ Disable" if is_enabled else "✅ Enable"} Tool',
+            f"userset {user_id} toggle_vid trim")
+        buttons.data_button(
+            f'{"✅ " if has_start else ""}Start Time',
+            f"userset {user_id} vid_settext vid_trim_start")
+        if has_start:
+            buttons.data_button("🗑️ Reset Start", f"userset {user_id} rem_vid vid_trim_start")
+        buttons.data_button(
+            f'{"✅ " if has_end else ""}End Time',
+            f"userset {user_id} vid_settext vid_trim_end")
+        if has_end:
+            buttons.data_button("🗑️ Reset End", f"userset {user_id} rem_vid vid_trim_end")
+        buttons.data_button("« Back",  f"userset {user_id} vidtools", "footer")
+        buttons.data_button("✘ Close", f"userset {user_id} close",   "footer")
+        btns = buttons.build_menu(2)
+        text = (
+            f"⌬ <b>Trim Video :</b> {user_name}\n"
+            f"┟\n"
+            f"┠ <b>Status :</b> <i>{'Enabled ✅' if is_enabled else 'Disabled ❌'}</i>\n"
+            f"┠ <b>Start :</b> <code>{t_start}</code>\n"
+            f"┖ <b>End :</b> <code>{t_end}</code>\n\n"
+            f"<i>Trim videos using HH:MM:SS. Example start: <code>00:01:30</code>, end: <code>00:05:00</code>.</i>"
+        )
+
+    # ── Remove Stream ──
+    elif stype == "vid_rmstream":
+        is_enabled = "rmstream" not in set(user_dict.get("disabled_vidtools", []))
+        selected   = user_dict.get("vid_rmstream_kind", _VID_DEFAULTS["vid_rmstream_kind"])
+        buttons.data_button(
+            f'{"❌ Disable" if is_enabled else "✅ Enable"} Tool',
+            f"userset {user_id} toggle_vid rmstream")
+        for stream in _VID_MULTI_OPTIONS["vid_rmstream_kind"]:
+            mark = "✅" if stream in selected else "❌"
+            buttons.data_button(
+                f"{mark} Remove {stream.title()}",
+                f"userset {user_id} vid_multi vid_rmstream_kind {stream}")
+        buttons.data_button("« Back",  f"userset {user_id} vidtools", "footer")
+        buttons.data_button("✘ Close", f"userset {user_id} close",   "footer")
+        btns = buttons.build_menu(2)
+        text = (
+            f"⌬ <b>Remove Stream :</b> {user_name}\n"
+            f"┟\n"
+            f"┠ <b>Status :</b> <i>{'Enabled ✅' if is_enabled else 'Disabled ❌'}</i>\n"
+            f"┖ <b>Removing :</b> <i>{', '.join(s.title() for s in selected) or 'None'}</i>\n\n"
+            f"<i>Toggle which stream types to strip from the output video.</i>"
+        )
+
     return text, btns
 
 
@@ -1011,7 +1402,13 @@ async def set_option(_, message, option, rfunc):
         if not value.isdigit():
             value = get_size_bytes(value)
         value = min(int(value), TgClient.MAX_SPLIT_SIZE)
-    # elif option == "LEECH_DUMP_CHAT": # TODO: Add
+    elif option == "LEECH_DUMP_CHAT":
+        value = value.strip()
+        if value.lower() == "pm":
+            pass  # keep as string "pm", common.py handles it
+        elif value.lstrip("-").isdigit():
+            value = int(value)
+        # else keep as-is (username, b:/u:/h: prefix, topic pipe notation etc.)
     elif option == "EXCLUDED_EXTENSIONS":
         fx = value.split()
         value = ["aria2", "!qB"]
@@ -1049,6 +1446,13 @@ async def set_option(_, message, option, rfunc):
         if value and isinstance(value, str):
             if value.strip() == "":
                 value = {}
+            elif "=" not in value:
+                # Plain text — treat as title for ALL streams
+                parsed_metadata_dict = {"title": value.strip()}
+                if option == "METADATA":
+                    for _stream_key in ["AUDIO_METADATA", "VIDEO_METADATA", "SUBTITLE_METADATA"]:
+                        update_user_ldata(user_id, _stream_key, dict(parsed_metadata_dict))
+                value = parsed_metadata_dict
             else:
                 parts = []
                 current = ""
@@ -1074,7 +1478,7 @@ async def set_option(_, message, option, rfunc):
                 if not parsed_metadata_dict and value.strip() != "":
                     await send_message(
                         message,
-                        "Malformed metadata string. Format: key1=value1|key2=value2. Use \\| to escape pipe characters.",
+                        "Malformed metadata string. Format: key1=value1|key2=value2. Use \\| to escape pipe characters.\n\n<i>Tip: To set a plain title on all streams, just send text without any <code>=</code> sign.</i>",
                     )
                     return
                 value = parsed_metadata_dict
@@ -1201,6 +1605,22 @@ async def get_menu(option, message, user_id):
 ┖ <b>Description</b> → {user_settings_text[option][1]}
 """
     await edit_message(message, text, buttons.build_menu(2))
+
+
+@new_task
+async def set_vid_text_option(_, message, field, rfunc):
+    user_id = message.from_user.id
+    if not handler_dict.get(user_id, False):
+        return
+    handler_dict[user_id] = False
+    value = message.text.strip() if message.text else ""
+    if value:
+        if field == "vid_hardsub_size" and value.isdigit():
+            value = int(value)
+        update_user_ldata(user_id, field, value)
+        await database.update_user_data(user_id)
+    await delete_message(message)
+    await rfunc()
 
 
 async def event_handler(client, query, pfunc, rfunc, photo=False, document=False):
@@ -1426,12 +1846,153 @@ async def edit_user_settings(client, query):
     elif data[2] == "view":
         await query.answer()
         await send_file(message, thumb_path, name)
+    elif data[2] == "clear_all_meta":
+        await query.answer("All metadata cleared!", show_alert=True)
+        _live_dict = user_data.get(user_id, {})
+        for _mk in ["METADATA", "AUDIO_METADATA", "VIDEO_METADATA", "SUBTITLE_METADATA"]:
+            _live_dict.pop(_mk, None)
+        await database.update_user_data(user_id)
+        await update_user_settings(query, stype="ffset")
     elif data[2] in ["gd", "rc"]:
         await query.answer()
         du = "rc" if data[2] == "gd" else "gd"
         update_user_ldata(user_id, "DEFAULT_UPLOAD", du)
         await update_user_settings(query, stype="general")
         await database.update_user_data(user_id)
+    elif data[2] in [
+        "vidtools",
+        "vid_merge",
+        "vid_audmux",
+        "vid_hardsub",
+        "vid_subsync",
+        "vid_compress",
+        "vid_convert",
+        "vid_watermark",
+        "vid_extract",
+        "vid_trim",
+        "vid_rmstream",
+    ]:
+        await query.answer()
+        await update_user_settings(query, data[2])
+    elif data[2] == "vid_setting":
+        if len(data) < 4 or data[3] not in _VID_SETTING_MAP:
+            await query.answer("Unknown tool!", show_alert=True)
+            return
+        await query.answer()
+        await update_user_settings(query, _VID_SETTING_MAP[data[3]])
+    elif data[2] == "toggle_vid":
+        if len(data) < 4:
+            await query.answer("Missing tool key!", show_alert=True)
+            return
+        vid_key  = data[3]
+        disabled = set(user_dict.get("disabled_vidtools", []))
+        if vid_key in disabled:
+            disabled.discard(vid_key)
+            await query.answer(f"{vid_key} Enabled ✅", show_alert=True)
+        else:
+            disabled.add(vid_key)
+            await query.answer(f"{vid_key} Disabled ❌", show_alert=True)
+        update_user_ldata(user_id, "disabled_vidtools", list(disabled))
+        await database.update_user_data(user_id)
+        await update_user_settings(query, _TOGGLE_BACK_MAP.get(vid_key, "vidtools"))
+    elif data[2] == "vid_cycle":
+        if len(data) < 4:
+            await query.answer("Missing field!", show_alert=True)
+            return
+        field = data[3]
+        opts  = _VID_FIELD_OPTIONS.get(field, [])
+        if not opts:
+            await query.answer("Unknown field!", show_alert=True)
+            return
+        current  = user_dict.get(field, _VID_DEFAULTS.get(field, opts[0]))
+        next_val = opts[(opts.index(current) + 1) % len(opts)] if current in opts else opts[0]
+        update_user_ldata(user_id, field, next_val)
+        await database.update_user_data(user_id)
+        await query.answer(f"{field.replace('_', ' ').title()} → {next_val.title()}", show_alert=True)
+        _FIELD_STYPE = {
+            "vid_merge_mode":     "vid_merge",
+            "vid_audio_codec":    "vid_audmux",
+            "vid_convert_format": "vid_convert",
+            "vid_watermark_pos":  "vid_watermark",
+        }
+        await update_user_settings(query, _FIELD_STYPE.get(field, "vidtools"))
+    elif data[2] == "vid_set":
+        if len(data) < 5:
+            await query.answer("Missing args!", show_alert=True)
+            return
+        field, value = data[3], data[4]
+        update_user_ldata(user_id, field, value)
+        await database.update_user_data(user_id)
+        await query.answer(f"{field.replace('_', ' ').title()} → {value.upper()}", show_alert=True)
+        _FIELD_STYPE_SET = {
+            "vid_264_preset":     "vid_compress",
+            "vid_265_preset":     "vid_compress",
+            "vid_convert_format": "vid_convert",
+        }
+        await update_user_settings(query, _FIELD_STYPE_SET.get(field, "vidtools"))
+    elif data[2] == "vid_multi":
+        if len(data) < 5:
+            await query.answer("Missing args!", show_alert=True)
+            return
+        field, item = data[3], data[4]
+        opts = _VID_MULTI_OPTIONS.get(field, [])
+        if not opts or item not in opts:
+            await query.answer("Unknown option!", show_alert=True)
+            return
+        current = list(user_dict.get(field, _VID_DEFAULTS.get(field, [])))
+        if item in current:
+            current.remove(item)
+            await query.answer(f"{item.title()} removed ❌", show_alert=True)
+        else:
+            current.append(item)
+            await query.answer(f"{item.title()} added ✅", show_alert=True)
+        update_user_ldata(user_id, field, current)
+        await database.update_user_data(user_id)
+        _MULTI_STYPE = {
+            "vid_extract_streams": "vid_extract",
+            "vid_rmstream_kind":   "vid_rmstream",
+        }
+        await update_user_settings(query, _MULTI_STYPE.get(field, "vidtools"))
+    elif data[2] == "rem_vid":
+        if len(data) < 4:
+            await query.answer("Missing field!", show_alert=True)
+            return
+        field = data[3]
+        user_dict.pop(field, None)
+        update_user_ldata(user_id, field, "")
+        await database.update_user_data(user_id)
+        await query.answer(f"{field.replace('_', ' ').title()} reset!", show_alert=True)
+        _REM_STYPE = {
+            "vid_audio_lang":        "vid_audmux",
+            "vid_subsync_delay":     "vid_subsync",
+            "vid_watermark_text":    "vid_watermark",
+            "vid_watermark_opacity": "vid_watermark",
+            "vid_trim_start":        "vid_trim",
+            "vid_trim_end":          "vid_trim",
+            "vid_banner":            "vid_compress",
+            "vid_hardsub_font":      "vid_hardsub",
+            "vid_hardsub_size":      "vid_hardsub",
+        }
+        await update_user_settings(query, _REM_STYPE.get(field, "vidtools"))
+    elif data[2] == "vid_settext":
+        if len(data) < 4 or data[3] not in _VID_INPUT_MAP:
+            await query.answer("Unknown field!", show_alert=True)
+            return
+        await query.answer()
+        field  = data[3]
+        label, prompt, back_stype = _VID_INPUT_MAP[field]
+        buttons_vt = ButtonMaker()
+        buttons_vt.data_button("⏹ Stop", f"userset {user_id} {back_stype}")
+        buttons_vt.data_button("« Back",  f"userset {user_id} {back_stype}", "footer")
+        buttons_vt.data_button("✘ Close", f"userset {user_id} close",        "footer")
+        await edit_message(
+            message,
+            f"<b>✏️ Set {label}</b>\n\n{prompt}\n\n⏱ <b>Time Left :</b> <code>60 sec</code>",
+            buttons_vt.build_menu(2),
+        )
+        rfunc = partial(update_user_settings, query, back_stype)
+        pfunc = partial(set_vid_text_option, field=field, rfunc=rfunc)
+        await event_handler(client, query, pfunc, rfunc)
     elif data[2] == "back":
         await query.answer()
         stype = data[3] if len(data) == 4 else "main"
