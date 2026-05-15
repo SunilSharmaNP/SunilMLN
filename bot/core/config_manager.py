@@ -123,6 +123,17 @@ class Config:
     YT_TAGS = ["telegram", "bot", "youtube"]
     YT_CATEGORY_ID = 22
     YT_PRIVACY_STATUS = "unlisted"
+    VT_LIB265_PRESET = "slow"
+    VT_LIB264_PRESET = "fast"
+    VT_COMPRESS_BANNER = ""
+    VT_HARDSUB_FONT_NAME = "Arial"
+    VT_HARDSUB_FONT_SIZE = ""
+    VT_FAST_MODE = False
+    VT_DISABLE_MODES = []
+    VT_DISABLE_MULTI = []
+    IMAGE_BOTSETTINGS = ""
+    IMAGE_USETTINGS = ""
+    IMAGE_VIDTOOLS = ""
 
     @classmethod
     def get(cls, key):
