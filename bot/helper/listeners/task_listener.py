@@ -243,10 +243,23 @@ class TaskListener(TaskConfig):
             self.size = await get_path_size(up_dir)
             self.clear()
 
+        if self.vid_mode:
+            from bot.helper.video_utils.executor import VidExecutor
+            vid_exec = VidExecutor(self, up_path, gid)
+            result = await vid_exec.execute()
+            if self.is_cancelled:
+                return
+            if result:
+                up_path = result
+            self.is_file = await aiopath.isfile(up_path)
+            self.name = up_path.replace(f"{up_dir}/", "").split("/", 1)[0]
+            self.size = await get_path_size(up_dir)
+
         if (
             (hasattr(self, "metadata_dict") and self.metadata_dict)
             or (hasattr(self, "audio_metadata_dict") and self.audio_metadata_dict)
             or (hasattr(self, "video_metadata_dict") and self.video_metadata_dict)
+            or (hasattr(self, "subtitle_metadata_dict") and self.subtitle_metadata_dict)
         ):
             up_path = await apply_metadata_title(
                 self,
@@ -255,6 +268,7 @@ class TaskListener(TaskConfig):
                 getattr(self, "metadata_dict", {}),
                 getattr(self, "audio_metadata_dict", {}),
                 getattr(self, "video_metadata_dict", {}),
+                getattr(self, "subtitle_metadata_dict", {}),
             )
             if self.is_cancelled:
                 return
@@ -455,6 +469,7 @@ class TaskListener(TaskConfig):
                 log_chat = self.user_id if self.bot_pm else self.message
                 msg += "〶 <b><u>Files List :</u></b>\n"
                 fmsg = ""
+                dump_msgs = []
                 for index, (link, name) in enumerate(files.items(), start=1):
                     chat_id, msg_id = link.split("/")[-2:]
                     fmsg += f"{index}. <a href='{link}'>{name}</a>"
@@ -468,10 +483,31 @@ class TaskListener(TaskConfig):
                     fmsg += "\n"
                     if len(fmsg.encode() + msg.encode()) > 4000:
                         await send_message(log_chat, msg + fmsg)
+                        dump_msgs.append(msg + fmsg)
                         await sleep(1)
                         fmsg = ""
                 if fmsg != "":
                     await send_message(log_chat, msg + fmsg)
+                    dump_msgs.append(msg + fmsg)
+                # Send completion summary to user's personal dump channel
+                if self.leech_dest:
+                    try:
+                        _dump_id = self.leech_dest
+                        if not isinstance(_dump_id, int):
+                            if "|" in str(_dump_id):
+                                _dump_id, _ = str(_dump_id).split("|", 1)
+                            if str(_dump_id).lstrip("-").isdigit():
+                                _dump_id = int(_dump_id)
+                            elif str(_dump_id).lower() == "pm":
+                                _dump_id = self.user_id
+                        # Avoid sending twice when personal dump == log_chat
+                        _log_chat_id = self.user_id if self.bot_pm else getattr(self.message, "chat", None) and self.message.chat.id
+                        if _dump_id != _log_chat_id:
+                            for _dm in dump_msgs:
+                                await send_message(_dump_id, _dm)
+                                await sleep(0.5)
+                    except Exception as _de:
+                        LOGGER.warning(f"Personal dump send failed ({self.leech_dest}): {_de}")
         else:
             msg += f"\n│\n┟ <b>Type</b> → {mime_type}"
             if mime_type == "Folder":
