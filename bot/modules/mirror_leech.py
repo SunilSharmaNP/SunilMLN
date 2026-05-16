@@ -65,6 +65,7 @@ class Mirror(TaskListener):
         bulk=None,
         multi_tag=None,
         options="",
+        vid_mode=None,
         **kwargs,
     ):
         if same_dir is None:
@@ -83,6 +84,7 @@ class Mirror(TaskListener):
         self.is_jd = is_jd
         self.is_nzb = is_nzb
         self.is_uphoster = is_uphoster
+        self.vid_mode = vid_mode
 
     async def new_event(self):
         text = self.message.text.split("\n")
@@ -131,6 +133,7 @@ class Mirror(TaskListener):
             "-ns": "",
             "-tl": "",
             "-ff": set(),
+            "-vt": False,
         }
 
         arg_parser(input_list[1:], args)
@@ -269,6 +272,19 @@ class Mirror(TaskListener):
         if len(self.bulk) != 0:
             del self.bulk[0]
 
+        if args["-vt"] and (not self.vid_mode or not self.same_dir):
+            from bot.helper.video_utils.selector import SelectMode
+            sel = SelectMode(self)
+            result = await sel.get_buttons()
+            if not result or sel.is_cancelled:
+                await self.remove_from_same_dir()
+                await delete_links(self.message)
+                return
+            mode, newname, extra_data = result
+            if newname:
+                self.name = newname
+            self.vid_mode = [mode, newname, extra_data]
+
         await self.run_multi(input_list, Mirror)
 
         await self.get_tag(text)
@@ -312,6 +328,7 @@ class Mirror(TaskListener):
                 self.bulk,
                 self.multi_tag,
                 self.options,
+                self.vid_mode,
             ).new_event()
             return
 
