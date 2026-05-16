@@ -1,4 +1,6 @@
+import aiohttp
 from asyncio import sleep
+from json import dumps as json_dumps
 from logging import getLogger
 from os import path as ospath, walk
 from re import match as re_match, sub as re_sub
@@ -107,6 +109,52 @@ class TelegramUploader:
 
         if self._thumb != "none" and not await aiopath.exists(self._thumb):
             self._thumb = None
+
+    async def _set_video_cover(self, video_msg, caption=None, cover_bytes=None):
+        """Set HD video cover using Telegram Bot API editMessageMedia.
+        cover_bytes: pre-read bytes of the thumbnail — read once, reuse for all destinations."""
+        try:
+            if not video_msg or not video_msg.video:
+                return
+            if not cover_bytes:
+                return
+
+            LOGGER.info(f"Setting HD video cover for message: {video_msg.id}")
+
+            bot_token = TgClient.bot.bot_token if hasattr(TgClient.bot, 'bot_token') else None
+            if not bot_token:
+                LOGGER.error("Bot token not found, cannot set cover")
+                return
+
+            api_url = f"https://api.telegram.org/bot{bot_token}/editMessageMedia"
+
+            media_json = {
+                "type": "video",
+                "media": video_msg.video.file_id,
+                "supports_streaming": True,
+                "cover": "attach://cover",
+            }
+            if caption:
+                media_json["caption"] = caption
+                media_json["parse_mode"] = "HTML"
+
+            form = aiohttp.FormData()
+            form.add_field('chat_id', str(video_msg.chat.id))
+            form.add_field('message_id', str(video_msg.id))
+            form.add_field('media', json_dumps(media_json))
+            form.add_field('cover', cover_bytes, filename='cover.jpg', content_type='image/jpeg')
+
+            _timeout = aiohttp.ClientTimeout(total=30)
+            async with aiohttp.ClientSession(timeout=_timeout) as session:
+                async with session.post(api_url, data=form) as resp:
+                    result = await resp.json()
+                    if result.get('ok'):
+                        LOGGER.info(f"Video cover set successfully on msg {video_msg.id}")
+                    else:
+                        LOGGER.error(f"Failed to set cover on msg {video_msg.id}: {result.get('description', 'Unknown error')}")
+
+        except Exception as e:
+            LOGGER.error(f"Error in _set_video_cover: {e}", exc_info=True)
 
     async def _msg_to_reply(self):
         if self._listener.up_dest:
