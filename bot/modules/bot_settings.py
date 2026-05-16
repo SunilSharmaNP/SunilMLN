@@ -78,6 +78,7 @@ async def get_buttons(key=None, edit_type=None, edit_mode=False):
     buttons = ButtonMaker()
     if key is None:
         buttons.data_button("Config Variables", "botset var")
+        buttons.data_button("Bot Image", "botset botvar IMAGE_BOTSETTINGS")
         buttons.data_button("Private Files", "botset private open")
         buttons.data_button("Qbit Settings", "botset qbit")
         buttons.data_button("Aria2c Settings", "botset aria")
@@ -100,9 +101,13 @@ async def get_buttons(key=None, edit_type=None, edit_mode=False):
                 "TELEGRAM_API",
                 "BOT_TOKEN",
                 "TG_PROXY",
+                "IMAGE_BOTSETTINGS",
             ]:
                 msg += "Restart required for this edit to take effect! You will not see the changes in bot vars, the edit will be in database only!\n\n"
-            msg += f"Send a valid value for {key}. Current value is '{Config.get(key)}'. Timeout: 60 sec"
+            if key == "IMAGE_BOTSETTINGS":
+                msg += f"Send an image url or file id for {key}. Current value is '{Config.get(key)}'. Timeout: 60 sec"
+            else:
+                msg += f"Send a valid value for {key}. Current value is '{Config.get(key)}'. Timeout: 60 sec"
         elif edit_type == "ariavar":
             buttons.data_button("Back", "botset aria")
             if key != "newkey":
