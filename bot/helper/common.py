@@ -501,18 +501,18 @@ class TaskConfig:
                     self.split_size = int(self.split_size)
                 else:
                     self.split_size = get_size_bytes(self.split_size)
+            self.max_split_size = (
+                TgClient.MAX_SPLIT_SIZE if self.user_transmission else 2097152000
+            )
             self.split_size = (
                 self.split_size
                 or self.user_dict.get("LEECH_SPLIT_SIZE")
-                or Config.LEECH_SPLIT_SIZE
+                or (self.max_split_size if self.user_transmission else Config.LEECH_SPLIT_SIZE)
             )
             self.equal_splits = (
                 self.user_dict.get("EQUAL_SPLITS")
                 or Config.EQUAL_SPLITS
                 and "EQUAL_SPLITS" not in self.user_dict
-            )
-            self.max_split_size = (
-                TgClient.MAX_SPLIT_SIZE if self.user_transmission else 2097152000
             )
             self.split_size = min(self.split_size, self.max_split_size)
 
