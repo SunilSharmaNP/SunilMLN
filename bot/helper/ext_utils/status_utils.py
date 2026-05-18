@@ -15,6 +15,7 @@ from ... import (
 )
 from ...core.config_manager import Config
 from ..telegram_helper.button_build import ButtonMaker
+from ..themes import BotTheme
 
 SIZE_UNITS = ["B", "KB", "MB", "GB", "TB", "PB"]
 
@@ -45,7 +46,7 @@ class EngineStatus:
         self.STATUS_AIOHTTP = f"AioHttp v{ver.get('aiohttp', 'N/A')}"
         self.STATUS_GDAPI = f"Google-API v{ver.get('gapi', 'N/A')}"
         self.STATUS_QBIT = f"qBit v{ver.get('qBittorrent', 'N/A')}"
-        self.STATUS_TGRAM = f"Pyro v{ver.get('pyrotgfork', 'N/A')}"
+        self.STATUS_TGRAM = f"Pyro v{ver.get('pyrofork', 'N/A')}"
         self.STATUS_MEGA = f"MegaCMD v{ver.get('mega', 'N/A')}"
         self.STATUS_YTDLP = f"yt-dlp v{ver.get('yt-dlp', 'N/A')}"
         self.STATUS_FFMPEG = f"ffmpeg v{ver.get('ffmpeg', 'N/A')}"
@@ -227,13 +228,22 @@ async def get_readable_message(sid, is_user, page_no=1, status="All", page_step=
             tstatus = await task.status()
         else:
             tstatus = task.status()
-        msg += f"<b>{index + start_position}.</b> "
-        msg += f"<b><i>{escape(f'{task.name()}')}</i></b>"
+
+        msg += BotTheme("STATUS_NAME", Name=escape(f"{task.name()}")) or (
+            f"<b>{index + start_position}.</b> <b><i>{escape(f'{task.name()}')}</i></b>"
+        )
         if task.listener.subname:
             msg += f"\n┖ <b>Sub Name</b> → <i>{task.listener.subname}</i>"
         elapsed = time() - task.listener.message.date.timestamp()
 
-        msg += f"\n\n<b>Task By {task.listener.message.from_user.mention(style='html')} </b> ( #ID{task.listener.message.from_user.id} )"
+        msg += BotTheme("mm") or ""
+        msg += BotTheme(
+            "USER",
+            User=task.listener.message.from_user.mention(style="html"),
+        ) or f"\n\n<b>Task By {task.listener.message.from_user.mention(style='html')} </b>"
+        msg += BotTheme("ID", Id=task.listener.message.from_user.id) or (
+            f" ( #ID{task.listener.message.from_user.id} )"
+        )
         if task.listener.is_super_chat:
             msg += f" <i>[<a href='{task.listener.message.link}'>Link</a>]</i>"
 
@@ -242,7 +252,9 @@ async def get_readable_message(sid, is_user, page_no=1, status="All", page_step=
             and task.listener.progress
         ):
             progress = task.progress()
-            msg += f"\n┟ {get_progress_bar_string(progress)} <i>{progress}</i>"
+            msg += BotTheme("BAR", Bar=f"{get_progress_bar_string(progress)} {progress}") or (
+                f"\n┟ {get_progress_bar_string(progress)} <i>{progress}</i>"
+            )
             if task.listener.subname:
                 subsize = f" / {get_readable_file_size(task.listener.subsize)}"
                 ac = len(task.listener.files_to_proceed)
@@ -250,35 +262,47 @@ async def get_readable_message(sid, is_user, page_no=1, status="All", page_step=
             else:
                 subsize = ""
                 count = ""
-            msg += f"\n┠ <b>Processed</b> → <i>{task.processed_bytes()}{subsize} of {task.size()}</i>"
+            msg += BotTheme(
+                "PROCESSED", Processed=f"{task.processed_bytes()}{subsize} of {task.size()}"
+            ) or f"\n┠ <b>Processed</b> → <i>{task.processed_bytes()}{subsize} of {task.size()}</i>"
             if count:
                 msg += f"\n┠ <b>Count:</b> → <b>{count}</b>"
-            msg += f"\n┠ <b>Status</b> → <b>{tstatus}</b>"
-            msg += f"\n┠ <b>Speed</b> → <i>{task.speed()}</i>"
-            msg += f"\n┠ <b>Time</b> → <i>{task.eta()} of {get_readable_time(elapsed + get_raw_time(task.eta()))} ( {get_readable_time(elapsed)} )</i>"
+            msg += BotTheme("STATUS", Status=tstatus) or f"\n┠ <b>Status</b> → <b>{tstatus}</b>"
+            msg += BotTheme("SPEED", Speed=task.speed()) or f"\n┠ <b>Speed</b> → <i>{task.speed()}</i>"
+            msg += BotTheme(
+                "ETA",
+                Eta=f"{task.eta()} of {get_readable_time(elapsed + get_raw_time(task.eta()))} ( {get_readable_time(elapsed)} )",
+            ) or f"\n┠ <b>Time</b> → <i>{task.eta()} of {get_readable_time(elapsed + get_raw_time(task.eta()))} ( {get_readable_time(elapsed)} )</i>"
             if tstatus == MirrorStatus.STATUS_DOWNLOAD and (
                 task.listener.is_torrent or task.listener.is_qbit
             ):
                 try:
-                    msg += f"\n┠ <b>Seeders</b> → {task.seeders_num()} | <b>Leechers</b> → {task.leechers_num()}"
+                    msg += BotTheme("SEEDERS", Seeders=task.seeders_num()) or f"\n┠ <b>Seeders</b> → {task.seeders_num()}"
+                    msg += BotTheme("LEECHERS", Leechers=task.leechers_num()) or f"\n┠ <b>Leechers</b> → {task.leechers_num()}"
                 except Exception:
                     pass
-            # TODO: Add Connected Peers
         elif tstatus == MirrorStatus.STATUS_SEED:
-            msg += f"\n┠ <b>Size</b> → <i>{task.size()}</i> | <b>Uploaded</b>  → <i>{task.uploaded_bytes()}</i>"
-            msg += f"\n┠ <b>Status</b> → <b>{tstatus}</b>"
-            msg += f"\n┠ <b>Speed</b> → <i>{task.seed_speed()}</i>"
-            msg += f"\n┠ <b>Ratio</b> → <i>{task.ratio()}</i>"
-            msg += f"\n┠ <b>Time</b> → <i>{task.seeding_time()}</i> | <b>Elapsed</b> → <i>{get_readable_time(elapsed)}</i>"
+            msg += BotTheme("SEED_SIZE", Size=task.size()) or f"\n┠ <b>Size</b> → <i>{task.size()}</i>"
+            msg += BotTheme("SEED_SPEED", Speed=task.seed_speed()) or f"\n┠ <b>Speed</b> → <i>{task.seed_speed()}</i>"
+            msg += BotTheme("UPLOADED", Upload=task.uploaded_bytes()) or f" | <b>Uploaded</b> → <i>{task.uploaded_bytes()}</i>"
+            msg += BotTheme("RATIO", Ratio=task.ratio()) or f"\n┠ <b>Ratio</b> → <i>{task.ratio()}</i>"
+            msg += BotTheme("TIME", Time=task.seeding_time()) or f" | <b>Time</b> → <i>{task.seeding_time()}</i>"
+            msg += BotTheme("ELAPSED", Elapsed=get_readable_time(elapsed)) or f" | <b>Elapsed</b> → <i>{get_readable_time(elapsed)}</i>"
+            msg += BotTheme("SEED_ENGINE", Engine=task.engine) or f"\n┠ <b>Engine</b> → <i>{task.engine}</i>"
         else:
-            msg += f"\n┠ <b>Size</b> → <i>{task.size()}</i>"
-        msg += f"\n┠ <b>Engine</b> → <i>{task.engine}</i>"
-        msg += f"\n┠ <b>In Mode</b> → <i>{task.listener.mode[0]}</i>"
-        msg += f"\n┠ <b>Out Mode</b> → <i>{task.listener.mode[1]}</i>"
-        # TODO: Add Bt Sel
+            msg += BotTheme("STATUS_SIZE", Size=task.size()) or f"\n┠ <b>Size</b> → <i>{task.size()}</i>"
+
+        if tstatus != MirrorStatus.STATUS_SEED:
+            msg += BotTheme("ENGINE", Engine=task.engine) or f"\n┠ <b>Engine</b> → <i>{task.engine}</i>"
+            msg += BotTheme("STA_MODE", Mode=task.listener.mode[0]) or f"\n┠ <b>In Mode</b> → <i>{task.listener.mode[0]}</i>"
+            msg += f"\n┠ <b>Out Mode</b> → <i>{task.listener.mode[1]}</i>"
+
         from ..telegram_helper.bot_commands import BotCommands
 
-        msg += f"\n<b>┖ Stop</b> → <i>/{BotCommands.CancelTaskCommand[1]}_{task.gid()}</i>\n\n"
+        msg += BotTheme("CANCEL", Cancel=f"/{BotCommands.CancelTaskCommand[1]}_{task.gid()}") or (
+            f"\n<b>┖ Stop</b> → <i>/{BotCommands.CancelTaskCommand[1]}_{task.gid()}</i>"
+        )
+        msg += BotTheme("mn") or "\n\n"
 
     if len(msg) == 0:
         if status == "All":
@@ -286,12 +310,10 @@ async def get_readable_message(sid, is_user, page_no=1, status="All", page_step=
         else:
             msg = f"No Active {status} Tasks!\n\n"
 
-    msg += "⌬ <b><u>Bot Stats</u></b>"
     buttons = ButtonMaker()
     if not is_user:
         buttons.data_button("📜 TStats", f"status {sid} ov", position="header")
     if len(tasks) > STATUS_LIMIT:
-        msg += f"<b>Page:</b> {page_no}/{pages} | <b>Tasks:</b> {tasks_no} | <b>Step:</b> {page_step}\n"
         buttons.data_button("<<", f"status {sid} pre", position="header")
         buttons.data_button(">>", f"status {sid} nex", position="header")
         if tasks_no > 30:
@@ -303,6 +325,23 @@ async def get_readable_message(sid, is_user, page_no=1, status="All", page_step=
                 buttons.data_button(label, f"status {sid} st {status_value}")
     buttons.data_button("♻️ Refresh", f"status {sid} ref", position="header")
     button = buttons.build_menu(8)
-    msg += f"\n┟ <b>CPU</b> → {cpu_percent()}% | <b>F</b> → {get_readable_file_size(disk_usage(DOWNLOAD_DIR).free)} [{round(100 - disk_usage(DOWNLOAD_DIR).percent, 1)}%]"
-    msg += f"\n┖ <b>RAM</b> → {virtual_memory().percent}% | <b>UP</b> → {get_readable_time(time() - bot_start_time)}"
+
+    _cpu = cpu_percent()
+    _free = get_readable_file_size(disk_usage(DOWNLOAD_DIR).free)
+    _free_pct = round(100 - disk_usage(DOWNLOAD_DIR).percent, 1)
+    _ram = virtual_memory().percent
+    _uptime = get_readable_time(time() - bot_start_time)
+
+    footer = BotTheme("FOOTER") or "⌬ <b><u>Bot Stats</u></b>\n"
+    if tasks_no and not is_user:
+        footer += BotTheme("BOT_TASKS", Tasks=tasks_no, Ttask=tasks_no, Free=tasks_no) or ""
+    elif tasks_no:
+        footer += BotTheme("TASKS", Tasks=tasks_no) or ""
+    if len(tasks) > STATUS_LIMIT:
+        footer += f"<b>Page:</b> {page_no}/{pages} | <b>Step:</b> {page_step}\n"
+    footer += BotTheme("Cpu", cpu=_cpu) or f"\n┟ <b>CPU</b> → {_cpu}%"
+    footer += BotTheme("FREE", free=f"{_free} [{_free_pct}%]") or f" | <b>F</b> → {_free} [{_free_pct}%]"
+    footer += BotTheme("Ram", ram=_ram) or f"\n┠ <b>RAM</b> → {_ram}%"
+    footer += BotTheme("uptime", uptime=_uptime) or f" | <b>UP</b> → {_uptime}"
+    msg += footer
     return msg, button
